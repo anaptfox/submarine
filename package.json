@@ -1,0 +1,55 @@
+{
+  "name": "submarine",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "yarn checkyarn && next dev",
+    "build": "yarn checkyarn && next build",
+    "start": "yarn checkyarn && next start",
+    "preinstall": "yarn checkyarn",
+    "checkyarn": "echo \"$npm_execpath\" | grep -q \"yarn\\.js$\" || (echo '⚠️  Use yarn not npm! ⚠️ ' && echo && exit 1)"
+  },
+  "dependencies": {
+    "@emotion/core": "^10.0.0",
+    "@emotion/styled": "^10.0.0",
+    "babel-plugin-emotion": "^10.0.0",
+    "mqtt": "^3.0.0",
+    "next": "latest",
+    "react": "^16.7.0",
+    "react-dom": "^16.7.0"
+  },
+  "devDependencies": {
+    "@zeit/next-css": "^1.0.1",
+    "eslint": "^6.7.2",
+    "eslint-config-prettier": "^6.7.0",
+    "eslint-config-standard": "^14.1.0",
+    "eslint-plugin-import": "^2.18.2",
+    "eslint-plugin-node": "^10.0.0",
+    "eslint-plugin-prettier": "^3.1.1",
+    "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-react": "^7.17.0",
+    "eslint-plugin-standard": "^4.0.1",
+    "file-loader": "^4.0.0",
+    "husky": "^3.1.0",
+    "lint-staged": "^9.5.0",
+    "prettier": "^1.19.1",
+    "pretty-quick": "^2.0.1",
+    "url-loader": "^3.0.0",
+    "webpack": "^4.29.0"
+  },
+  "lint-staged": {
+    "*.{js,jsx}": [
+      "eslint",
+      "git add"
+    ],
+    "*.{json,md,scss,yaml,yml}": [
+      "prettier --write",
+      "git add"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "license": "ISC"
+}
