@@ -1,152 +1,210 @@
-import React, {useState} from 'react'
+import React, {useState, useEffect} from 'react'
 import Head from 'next/head'
-import styled from '@emotion/styled'
-import {keyframes, css, Global} from '@emotion/core'
+import {css, Global} from '@emotion/core'
+import useForm from 'react-hook-form'
 import mqtt from 'mqtt'
+import moment from 'moment'
 
-const Background = styled.div`
-  width: 100%;
-  height: 500px;
-  box-shadow: 0 2px 30px rgba(black, 0.2);
-  background: lighten(#f0f4c3, 10%);
-  position: absolute;
-  overflow: hidden;
-  transform: translate3d(0, 0, 0);
+import {
+  Container,
+  Form,
+  Checkbox,
+  Grid,
+  Image,
+  Modal,
+  Label,
+  Button,
+  Select,
+  Icon,
+  Feed,
+} from 'semantic-ui-react'
 
-  &:after {
-    content: '';
-    display: block;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    transform: translate3d(0, 0, 0);
+import {
+  Logo,
+  Header,
+  Main,
+  Background,
+  Wave,
+  App,
+  WaveThree,
+  WaveTwo,
+} from '../components/ui'
+import 'semantic-ui-css/semantic.min.css'
+
+const transportOptions = [{key: 'wss', value: 'wss', text: 'Secure WebSockets'}]
+
+// Map of transport types to the corresponding url prefixes.
+// form: https://github.com/Losant/losant-mqtt-js/blob/master/lib/mqtt.js
+var transportPrefixes = {
+  tcp: {prefix: 'mqtt://', port: 1883},
+  tls: {prefix: 'mqtts://', port: 8883},
+  ws: {prefix: 'ws://', port: 80},
+  wss: {prefix: 'wss://', port: 443},
+}
+
+const Message = ({type, title, date, data}) => {
+  return (
+    <Feed.Event>
+      <Feed.Label>
+        <Icon name="pencil" />
+      </Feed.Label>
+      <Feed.Content>
+        <Feed.Summary>
+          {title || type}
+          <Feed.Date>{date.fromNow()}</Feed.Date>
+        </Feed.Summary>
+        {data && <Feed.Extra text>{data.toString()}</Feed.Extra>}
+      </Feed.Content>
+    </Feed.Event>
+  )
+}
+
+const Messages = ({messages}) => {
+  const html = messages.map((message, index) => {
+    return (
+      <Message
+        key={`message-${index}-${message.date.unix()}`}
+        type={message.type}
+        date={message.date}
+        title={message.title}
+        data={message.data}
+      />
+    )
+  })
+  return <Feed>{html}</Feed>
+}
+
+const Index = () => {
+  const [fresh, setFresh] = useState(true)
+  const [client, setClient] = useState(null)
+  const [logs, setLogs] = useState([])
+  const [data, setData] = useState({})
+  const {register, handleSubmit, errors, setError} = useForm()
+  const [connected, setConnected] = useState(false)
+
+  const addMessage = newMessage => {
+    const {type, title, topic, data} = newMessage
+    const newMessages = [
+      ...logs,
+      {
+        type,
+        title,
+        topic,
+        data,
+        date: moment(),
+      },
+    ]
+    setLogs(newMessages)
   }
-`
 
-const drift = keyframes`
-from { transform: rotate(0deg); }
-from { transform: rotate(180deg); }
-`
+  const onSubmit = data => {
+    const {username, password, clientId} = data
+    setFresh(false)
+    const mqttOptions = {
+      username,
+      password,
+      clientId,
+    }
 
-const Wave = styled.div`
-  opacity: 0.8;
-  position: absolute;
-  top: -800%;
-  left: -100%;
-  background: #4f81c7;
-  width: 4500px;
-  height: 4500px;
-  margin-left: -250px;
-  margin-top: -250px;
-  border-radius: 43%;
-  animation: ${drift} 20s infinite linear;
-  animation-play-state: ${props => (props.animate ? 'running' : 'paused')};
-`
+    const newClient = mqtt.connect(data.host, mqttOptions)
+    console.log(newClient)
+    setClient(newClient)
+  }
 
-const WaveTwo = styled(Wave)`
-  animation: ${drift} 21s infinite linear;
-  animation-play-state: ${props => (props.animate ? 'running' : 'paused')};
-`
-
-const WaveThree = styled(Wave)`
-  animation: ${drift} 22s infinite linear;
-  animation-play-state: ${props => (props.animate ? 'running' : 'paused')};
-  opacity: 0.1;
-  background: yellow;
-`
-
-const Logo = styled.img`
-  width: 125px;
-  margin-top: 30px;
-  z-index: 2;
-`
-const Header = styled.h1`
-  z-index: 2;
-  color: white;
-  margin: 10px 0 30px 0;
-  font-size: 22px;
-`
-
-const Main = styled.main`
-  display: flex;
-  height: 100%;
-  align-items: center;
-  z-index: 2;
-  flex-direction: column;
-`
-
-const App = styled.div`
-  width: 1127px;
-  height: 100%;
-  position: relative;
-  overflow: hidden;
-  transform: translate3d(0, 0, 0);
-  display: flex;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.19), 0 6px 6px rgba(0, 0, 0, 0.23);
-  justify-content: center;
-  align-items: center;
-  background: #fcfafa;
-`
-
-export default () => {
-  const [animateBackground, setAnimateBackground] = useState(false)
-
-  const flipBackground = toggle => {
-    return () => {
-      setAnimateBackground(toggle)
+  const onPublish = client => {
+    return data => {
+      console.log(data)
+      console.log(client)
+      if (client) {
+        client.publish(data.topic, data.message)
+      } else {
+        console.log('could not publish')
+      }
     }
   }
 
-  var host = 'wss://broker.losant.com:443'
-  const clientId = '5df84b48829bcb0006627187'
-
-  var options = {
-    clientId: clientId,
-    username: '619e023e-91e9-491e-b6e8-78b87fe9133c',
-    password:
-      'a6357184a4f4f7728bdc6fe88c76efb21abcc10aa4e3523048569f102c252438',
+  const onSubscribe = client => {
+    return data => {
+      console.log(data)
+      console.log(client)
+      if (client) {
+        client.subscribe(data.sub)
+      } else {
+        console.log('could not publish')
+      }
+    }
   }
 
-  var client = mqtt.connect(host, options)
+  const disconnect = () => {
+    console.log('disconnect')
+    client && client.end()
+    setClient(null)
+    setConnected(false)
+    addMessage({
+      type: 'disconnect',
+      title: 'Disconnected',
+    })
+  }
 
-  client.on('error', function(err) {
+  const clientOnError = err => {
     console.log(err)
     client.end()
-  })
+  }
 
-  client.on('connect', function() {
-    console.log('client connected:' + clientId)
-    setAnimateBackground(true)
-  })
+  const clientOnConnect = () => {
+    console.log('client connected')
+    setConnected(true)
+    addMessage({
+      type: 'connect',
+      title: 'Connected',
+    })
+  }
 
-  client.subscribe(`/losant/${clientId}/state`, {qos: 0})
+  const clientOnMessage = (topic, data, packet) => {
+    addMessage({
+      type: 'subscribe',
+      title: topic,
+      topic,
+      data,
+      date: moment(),
+    })
 
-  client.on('message', function(topic, message, packet) {
     console.log(
-      'Received Message:= ' + message.toString() + '\nOn topic:= ' + topic,
+      'Received Message:= ' + data.toString() + '\nOn topic:= ' + topic,
     )
-  })
+  }
 
-  client.on('close', function() {
-    console.log(clientId + ' disconnected')
-    setAnimateBackground(false)
-  })
+  const clientOnClose = () => {
+    console.log(' disconnected')
+    console.log(client)
+    disconnect()
+  }
+
+  useEffect(() => {
+    if (client) {
+      client.on('error', clientOnError)
+      client.on('connect', clientOnConnect)
+      client.on('message', clientOnMessage)
+      client.on('close', clientOnClose)
+    }
+    return () => {
+      if (client) {
+        client.removeListener('error', clientOnError)
+        client.removeListener('connect', clientOnConnect)
+        client.removeListener('message', clientOnMessage)
+        client.removeListener('close', clientOnClose)
+      }
+    }
+  }, [client, logs])
 
   return (
-    <React.Fragment>
+    <>
       <Global
         styles={css`
           html,
           body {
             height: 100%;
             margin: 0;
-            font-family: Helvetica, Arial, sans-serif;
-            font-size: 24px;
-          }
-          html {
-            background: #f0d78c;
           }
           #__next {
             height 100%;
@@ -158,21 +216,200 @@ export default () => {
       />
       <Head>
         <title>With Emotion</title>
-        <link href="https://fonts.googleapis.com/css?family=Quando&display=swap" rel="stylesheet"></link>
+        <link
+          href="https://fonts.googleapis.com/css?family=Quando&display=swap"
+          rel="stylesheet"
+        ></link>
       </Head>
       <Background>
-        <Wave animate={animateBackground} />
-        <WaveTwo animate={animateBackground} />
-        <WaveThree animate={animateBackground} />
+        <Wave animate={connected} />
+        <WaveThree animate={connected} />
       </Background>
       <Main>
         <Logo src="/submarine-logo.png" alt="Submarine Logo" />
         <Header>Submarine</Header>
         <App>
-          <button onClick={flipBackground(true)}>On </button>{' '}
-          <button onClick={flipBackground(false)}>off</button>
+          <Grid celled>
+            <Grid.Row>
+              <Grid.Column width={6}>
+                <Label color={connected ? 'green' : 'red'} attached="top right">
+                  {connected ? 'Connected' : 'Disconnected'}
+                </Label>
+                <div>
+                  <h2>Connection Settings</h2>
+                  <Form onSubmit={handleSubmit(onSubmit)} id="connection">
+                    <Form.Field>
+                      <input
+                        ref={register}
+                        name="host"
+                        type="text"
+                        defaultValue={data.host || 'ws://broker.losant.com:80'}
+                        placeholder="Host"
+                        error={errors.host}
+                        required
+                      />
+                      {errors.host && (
+                        <Label basic color="red" pointing>
+                          {errors.host.message}
+                        </Label>
+                      )}
+                    </Form.Field>
+                    <Form.Field>
+                      <input
+                        ref={register}
+                        name="clientId"
+                        type="text"
+                        defaultValue={
+                          data.clientId || '5df84b48829bcb0006627187'
+                        }
+                        placeholder="clientId"
+                        error={errors.clientId}
+                        required
+                      />
+                      {errors.clientId && (
+                        <Label basic color="red" pointing>
+                          {errors.clientId.message}
+                        </Label>
+                      )}
+                    </Form.Field>
+                    <Form.Field>
+                      <input
+                        ref={register}
+                        name="username"
+                        type="text"
+                        defaultValue={
+                          data.username ||
+                          '619e023e-91e9-491e-b6e8-78b87fe9133c'
+                        }
+                        placeholder="username"
+                        error={errors.username}
+                        required
+                      />
+                      {errors.username && (
+                        <Label basic color="red" pointing>
+                          {errors.username.message}
+                        </Label>
+                      )}
+                    </Form.Field>
+                    <Form.Field>
+                      <input
+                        ref={register}
+                        name="password"
+                        type="text"
+                        defaultValue={
+                          data.password ||
+                          'a6357184a4f4f7728bdc6fe88c76efb21abcc10aa4e3523048569f102c252438'
+                        }
+                        placeholder="password"
+                        error={errors.password}
+                        required
+                      />
+                      {errors.password && (
+                        <Label basic color="red" pointing>
+                          {errors.password.message}
+                        </Label>
+                      )}
+                    </Form.Field>
+                    {!connected && (
+                      <Button color="green" type="submit">
+                        Connect
+                      </Button>
+                    )}
+                    {connected && (
+                      <Button onClick={disconnect} color="red">
+                        Disconnect
+                      </Button>
+                    )}
+                  </Form>
+                </div>
+                {client && (
+                  <div style={{marginTop: '20px'}}>
+                    <h2>Publish</h2>
+                    <Form
+                      onSubmit={handleSubmit(onPublish(client))}
+                      id="publish"
+                    >
+                      <Form.Field>
+                        <input
+                          ref={register}
+                          name="topic"
+                          type="text"
+                          defaultValue={data.topic || '/test'}
+                          placeholder="topic"
+                          error={errors.topic}
+                          required
+                        />
+                        {errors.topic && (
+                          <Label basic color="red" pointing>
+                            {errors.topic.message}
+                          </Label>
+                        )}
+                      </Form.Field>
+                      <Form.Field>
+                        <textarea
+                          ref={register}
+                          name="message"
+                          type="text"
+                          defaultValue={data.message || 'woo'}
+                          placeholder="message"
+                          error={errors.message}
+                          required
+                        />
+                        {errors.message && (
+                          <Label basic color="red" pointing>
+                            {errors.message.message}
+                          </Label>
+                        )}
+                      </Form.Field>
+                      <Button type="submit" form="publish">
+                        Publish
+                      </Button>
+                    </Form>
+                  </div>
+                )}
+                {client && (
+                  <div style={{marginTop: '20px'}}>
+                    <h2>Subscribe</h2>
+                    <Form
+                      onSubmit={handleSubmit(onSubscribe(client))}
+                      id="subscribe"
+                    >
+                      <Form.Field>
+                        <input
+                          ref={register}
+                          name="sub"
+                          type="text"
+                          defaultValue={data.sub || '/losant/5df84b48829bcb0006627187/state'}
+                          placeholder="sub"
+                          error={errors.sub}
+                          required
+                        />
+                        {errors.sub && (
+                          <Label basic color="red" pointing>
+                            {errors.sub.message}
+                          </Label>
+                        )}
+                      </Form.Field>
+                      <Button type="submit" form="subscribe">
+                        Subscribe
+                      </Button>
+                    </Form>
+                  </div>
+                )}
+              </Grid.Column>
+              <Grid.Column width={10}>
+                {logs.length === 0 ? (
+                  <h1>Nada</h1>
+                ) : (
+                  <Messages messages={logs} />
+                )}
+              </Grid.Column>
+            </Grid.Row>
+          </Grid>
         </App>
       </Main>
-    </React.Fragment>
+    </>
   )
 }
+
+export default Index
