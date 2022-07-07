@@ -12,7 +12,7 @@
     "@emotion/core": "^10.0.0",
     "@emotion/styled": "^10.0.0",
     "babel-plugin-emotion": "^10.0.23",
-    "moment": "^2.24.0",
+    "moment": "^2.29.4",
     "mqtt": "^3.0.0",
     "next": "latest",
     "react": "^16.7.0",
